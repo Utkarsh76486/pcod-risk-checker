@@ -308,7 +308,7 @@ function OptionBtn({ label, selected, onClick, accent, accentDeep, index }: Opti
    MAIN QUESTIONNAIRE
 ══════════════════════════════════════ */
 export default function Questionnaire() {
-    const router = useRouter();
+  const router = useRouter();
   const [current, setCurrent]     = useState<number>(0);
   const [selected, setSelected]   = useState<string>("");
   const [answers, setAnswers]     = useState<string[]>([]);
@@ -330,8 +330,8 @@ export default function Questionnaire() {
       setCurrent((p) => p + 1);
       setSelected(updated[current + 1] ?? "");
     } else {
-      setFinalAnswers(updated);
-     router.push("/result");
+      // ✅ Pass answers via URL so ResultClient receives real data
+      router.push(`/result?data=${encodeURIComponent(JSON.stringify(updated))}`);
     }
   };
 

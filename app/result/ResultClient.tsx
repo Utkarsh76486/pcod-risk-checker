@@ -99,7 +99,8 @@ function ScoreRing({ score, total, accentA, accentB }: {
    MAIN
 ══════════════════════════════════════ */
 export default function ResultClient() {
-  const [answers, setAnswers] = useState<string[]>(["Yes","Sometimes","Yes","Yes","Yes","Sometimes"]);
+  // ✅ Start empty — filled from URL param, no hardcoded fallback
+  const [answers, setAnswers] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
