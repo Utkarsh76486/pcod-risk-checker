@@ -16,10 +16,9 @@ const questionMeta = [
 ];
 
 /* ══════════════════════════════════════
-   RISK CONFIG
+   RISK CONFIG  (pct = 0-100)
 ══════════════════════════════════════ */
-function getConfig(score: number, total: number) {
-  const pct = (score / total) * 100;
+function getConfig(pct: number) {
   if (pct <= 30) return {
     level: "Low Risk", emoji: "🌸", headline: "You're Looking Good!",
     subtext: "Minimal PCOS indicators. Keep monitoring your health regularly.",
@@ -43,21 +42,22 @@ function getConfig(score: number, total: number) {
 /* ══════════════════════════════════════
    SCORE RING
 ══════════════════════════════════════ */
-function ScoreRing({ score, total, accentA, accentB }: {
-  score: number; total: number; accentA: string; accentB: string;
+function ScoreRing({ pct, accentA, accentB }: {
+  pct: number; accentA: string; accentB: string;
 }) {
   const [n, setN] = useState(0);
-  const pct = Math.round((score / total) * 100);
   const r = 42, circ = 2 * Math.PI * r;
 
   useEffect(() => {
     const t0 = performance.now();
+    let raf = 0;
     const tick = (t: number) => {
       const p = Math.min((t - t0) / 1200, 1);
       setN(Math.round((1 - Math.pow(1 - p, 3)) * pct));
-      if (p < 1) requestAnimationFrame(tick);
+      if (p < 1) raf = requestAnimationFrame(tick);
     };
-    requestAnimationFrame(tick);
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [pct]);
 
   return (
@@ -74,7 +74,7 @@ function ScoreRing({ score, total, accentA, accentB }: {
           strokeWidth={8} strokeLinecap="round"
           strokeDasharray={circ}
           initial={{ strokeDashoffset: circ }}
-          animate={{ strokeDashoffset: circ - (score / total) * circ }}
+          animate={{ strokeDashoffset: circ - (pct / 100) * circ }}
           transition={{ duration: 1.3, ease: [0.22, 1, 0.36, 1], delay: 0.35 }}
         />
         <defs>
@@ -88,8 +88,8 @@ function ScoreRing({ score, total, accentA, accentB }: {
         position: "absolute", inset: 0, display: "flex",
         flexDirection: "column", alignItems: "center", justifyContent: "center",
       }}>
-        <span style={{ fontSize: 24, fontWeight: 700, fontFamily: "'Fraunces',serif", color: "white", lineHeight: 1 }}>{n}</span>
-        <span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.45)", fontWeight: 600, letterSpacing: ".07em", textTransform: "uppercase", marginTop: 2 }}>of {total}</span>
+        <span style={{ fontSize: 24, fontWeight: 700, fontFamily: "'Fraunces',serif", color: "white", lineHeight: 1 }}>{n}%</span>
+        <span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.45)", fontWeight: 600, letterSpacing: ".07em", textTransform: "uppercase", marginTop: 2 }}>risk</span>
       </div>
     </div>
   );
@@ -99,10 +99,12 @@ function ScoreRing({ score, total, accentA, accentB }: {
    MAIN
 ══════════════════════════════════════ */
 export default function ResultClient() {
-  // ✅ Start empty — filled from URL param, no hardcoded fallback
   const [answers, setAnswers] = useState<string[]>([]);
   const [ready, setReady] = useState(false);
+  const [ml, setMl] = useState<{ risk_probability: number } | null>(null);
+  const [mlLoading, setMlLoading] = useState(false);
 
+  // URL se answers padho
   useEffect(() => {
     try {
       const raw = new URLSearchParams(window.location.search).get("data");
@@ -114,6 +116,28 @@ export default function ResultClient() {
     setReady(true);
   }, []);
 
+  // ML model se prediction lo
+  useEffect(() => {
+    if (!ready || answers.length === 0) return;
+    const ctrl = new AbortController();
+    setMlLoading(true);
+    fetch("/api/predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        answers: Array.from({ length: 6 }, (_, i) => answers[i] ?? null),
+      }),
+      signal: ctrl.signal,
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && typeof d.risk_probability === "number") setMl(d);
+      })
+      .catch(() => {})
+      .finally(() => setMlLoading(false));
+    return () => ctrl.abort();
+  }, [ready, answers]);
+
   const symptoms = questionMeta.map((m, i) => {
     const ans = answers[i] || "No";
     const hi  = (m.highAnswers   || []).includes(ans);
@@ -121,9 +145,11 @@ export default function ResultClient() {
     return { ...m, ans, sev: hi ? "high" : med ? "medium" : "low" as "high"|"medium"|"low" };
   });
 
-  const score = symptoms.reduce((a, s) => a + (s.sev === "high" ? 1 : s.sev === "medium" ? 0.5 : 0), 0);
-  const total = questionMeta.length;
-  const cfg   = getConfig(score, total);
+  const score   = symptoms.reduce((a, s) => a + (s.sev === "high" ? 1 : s.sev === "medium" ? 0.5 : 0), 0);
+  const total   = questionMeta.length;
+  const rulePct = Math.round((score / total) * 100);
+  const pct     = ml ? Math.round(ml.risk_probability) : rulePct;  // ML fail ho to purana score
+  const cfg     = getConfig(pct);
 
   if (!ready) return null;
 
@@ -145,18 +171,13 @@ export default function ResultClient() {
         .float{animation:float 3.6s ease-in-out infinite}
       `}</style>
 
-      {/* ── Base dark background ── */}
       <div style={{ position:"fixed",inset:0,zIndex:0,background:"linear-gradient(135deg,#07070e 0%,#0d0818 38%,#100b1b 65%,#080b13 100%)" }} />
 
-      {/* ── Mesh blobs ── */}
       <div style={{ position:"fixed",top:"-18%",left:"-12%",width:"62vw",height:"62vw",maxWidth:720,borderRadius:"50%",background:`radial-gradient(circle,${cfg.meshA} 0%,transparent 65%)`,filter:"blur(75px)",pointerEvents:"none",zIndex:1,animation:"ma 13s ease-in-out infinite",transition:"background .9s" }} />
       <div style={{ position:"fixed",bottom:"-16%",right:"-12%",width:"56vw",height:"56vw",maxWidth:680,borderRadius:"50%",background:`radial-gradient(circle,${cfg.meshB} 0%,transparent 65%)`,filter:"blur(75px)",pointerEvents:"none",zIndex:1,animation:"mb 15s ease-in-out infinite",transition:"background .9s" }} />
       <div style={{ position:"fixed",top:"38%",left:"36%",width:"42vw",height:"42vw",maxWidth:520,borderRadius:"50%",background:`radial-gradient(circle,${cfg.meshC} 0%,transparent 70%)`,filter:"blur(82px)",pointerEvents:"none",zIndex:1,animation:"mc 11s ease-in-out infinite",opacity:.6 }} />
 
-      {/* ── Grid ── */}
       <div style={{ position:"fixed",inset:0,zIndex:2,pointerEvents:"none",backgroundImage:"linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px)",backgroundSize:"44px 44px" }} />
-
-      {/* ── Vignette ── */}
       <div style={{ position:"fixed",inset:0,zIndex:2,pointerEvents:"none",background:"radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,0.55) 100%)" }} />
 
       {/* ══════════════ CARD ══════════════ */}
@@ -177,16 +198,14 @@ export default function ResultClient() {
           overflow:"hidden",
         }}
       >
-        {/* Top gradient bar */}
         <div style={{ height:3, background:`linear-gradient(90deg,transparent,${cfg.accentB},${cfg.accentA},${cfg.accentB},transparent)`, transition:"background .7s" }} />
 
-        {/* Inner corner glows */}
         <div style={{ position:"absolute",top:-55,right:-55,width:160,height:160,borderRadius:"50%",background:`${cfg.accentA}10`,pointerEvents:"none",transition:"background .7s" }} />
         <div style={{ position:"absolute",bottom:-45,left:-45,width:130,height:130,borderRadius:"50%",background:`${cfg.accentB}08`,pointerEvents:"none" }} />
 
         <div style={{ padding:"20px 20px 18px" }}>
 
-          {/* ── Top row ── */}
+          {/* Top row */}
           <motion.div initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} transition={{delay:.12}}
             style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16 }}
           >
@@ -197,9 +216,9 @@ export default function ResultClient() {
             <div style={{ padding:"5px 11px",borderRadius:99,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.09)",fontSize:10.5,fontWeight:600,color:"rgba(255,255,255,0.35)" }}>Results</div>
           </motion.div>
 
-          {/* ── Hero: ring + headline ── */}
+          {/* Hero: ring + headline */}
           <div style={{ display:"flex",gap:16,alignItems:"center",marginBottom:16 }}>
-            <ScoreRing score={Math.round(score)} total={total} accentA={cfg.accentA} accentB={cfg.accentB} />
+            <ScoreRing pct={pct} accentA={cfg.accentA} accentB={cfg.accentB} />
             <div style={{flex:1,minWidth:0}}>
               <motion.div className="float" initial={{opacity:0}} animate={{opacity:1}} transition={{delay:.2}}
                 style={{fontSize:28,lineHeight:1,marginBottom:7}}>{cfg.emoji}</motion.div>
@@ -213,6 +232,9 @@ export default function ResultClient() {
                 <div style={{width:5,height:5,borderRadius:"50%",background:cfg.accentA,boxShadow:`0 0 6px ${cfg.accentA}`}} />
                 <span style={{fontSize:11,fontWeight:700,color:cfg.accentA,letterSpacing:".03em"}}>{cfg.level}</span>
               </motion.div>
+              <div style={{ fontSize: 9.5, color: "rgba(255,255,255,0.3)", marginTop: 6 }}>
+                {mlLoading ? "Analysing with AI model…" : ml ? "Predicted by ML model" : "Based on symptom score"}
+              </div>
             </div>
           </div>
 
@@ -221,7 +243,7 @@ export default function ResultClient() {
             style={{fontSize:12,color:"rgba(255,255,255,0.42)",lineHeight:1.6,marginBottom:16,paddingBottom:16,borderBottom:"1px solid rgba(255,255,255,0.07)"}}
           >{cfg.subtext}</motion.p>
 
-          {/* ── Symptom grid 3×2 ── */}
+          {/* Symptom grid 3×2 */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7,marginBottom:16}}>
             {symptoms.map((s, i) => {
               const hi  = s.sev === "high";
@@ -254,7 +276,7 @@ export default function ResultClient() {
             })}
           </div>
 
-          {/* ── Disclaimer + Retake ── */}
+          {/* Disclaimer + Retake */}
           <motion.div initial={{opacity:0}} animate={{opacity:1}} transition={{delay:.9}}
             style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,paddingTop:14,borderTop:"1px solid rgba(255,255,255,0.07)"}}
           >
