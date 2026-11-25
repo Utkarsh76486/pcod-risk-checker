@@ -24,7 +24,7 @@ if df is None:
 print("Rows:", len(df))
 print("PCOS wale:", int(df["PCOS (Y/N)"].sum()))
 
-# ---------- 2. Sirf wo 4 columns jo questionnaire se match karte hain ----------
+# ---------- 2. Sirf wo columns jo questionnaire se match karte hain (4 symptoms + age) ----------
 def num(col):
     return pd.to_numeric(df[col], errors="coerce").fillna(0)
 
@@ -33,6 +33,7 @@ X = pd.DataFrame({
     "acne":              num("Pimples(Y/N)").astype(int),
     "weight_gain":       num("Weight gain(Y/N)").astype(int),
     "hair_growth":       num("hair growth(Y/N)").astype(int),
+    "age":               num("Age (yrs)").clip(20, 48),   # dataset range 20-48
 })
 y = num("PCOS (Y/N)").astype(int)
 
@@ -69,8 +70,8 @@ with open("requirements.txt", "w") as f:
     f.write(f"fastapi\nuvicorn\nscikit-learn=={sklearn.__version__}\npandas\njoblib\n")
 
 # ---------- 6. Sanity check (thresholds set karne ke kaam aayega) ----------
-def p(a, b, c, d):
-    row = pd.DataFrame([[a, b, c, d]], columns=X.columns)
+def p(a, b, c, d, age=28):
+    row = pd.DataFrame([[a, b, c, d, age]], columns=X.columns)
     return round(best.predict_proba(row)[0][1] * 100, 1)
 
 print("\n--- Sanity check (risk %) ---")
@@ -78,4 +79,6 @@ print("Sab No        :", p(0, 0, 0, 0))
 print("Sab Yes       :", p(1, 1, 1, 1))
 print("Sirf periods  :", p(1, 0, 0, 0))
 print("Aapka example :", p(0, 1, 0, 1))
+print("Sab Yes, age 21:", p(1, 1, 1, 1, 21))
+print("Sab Yes, age 40:", p(1, 1, 1, 1, 40))
 print("\nmodel.pkl aur requirements.txt ban gayi. Done!")

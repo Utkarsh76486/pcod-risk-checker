@@ -13,7 +13,13 @@ const questionMeta = [
   { emoji: "🌿", tag: "Excess Hair",        accent: "#34D399", accentDeep: "#065F46", highAnswers: ["Yes"] },
   { emoji: "😴", tag: "Fatigue",            accent: "#60A5FA", accentDeep: "#1D4ED8", highAnswers: ["Yes"] },
   { emoji: "💫", tag: "Mood Swings",        accent: "#F9A8D4", accentDeep: "#9D174D", highAnswers: ["Frequently"], mediumAnswers: ["Sometimes"] },
+  { emoji: "🎂", tag: "Age",                accent: "#FBBF24", accentDeep: "#B45309", highAnswers: ["18-24", "25-30", "31-35"], mediumAnswers: ["Under 18", "Above 35"] },
 ];
+
+// Age range -> number (ML model ke liye)
+const ageMap: Record<string, number> = {
+  "Under 18": 16, "18-24": 21, "25-30": 28, "31-35": 33, "Above 35": 38,
+};
 
 /* ══════════════════════════════════════
    RISK CONFIG  (pct = 0-100)
@@ -125,7 +131,8 @@ export default function ResultClient() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        answers: Array.from({ length: 6 }, (_, i) => answers[i] ?? null),
+        answers: Array.from({ length: 7 }, (_, i) => answers[i] ?? null),
+        age: answers[6] ? ageMap[answers[6]] ?? null : null,
       }),
       signal: ctrl.signal,
     })
@@ -258,6 +265,7 @@ export default function ResultClient() {
                     background: hi ? `linear-gradient(135deg,${s.accentDeep}28,${s.accent}22)` : "rgba(255,255,255,0.04)",
                     border: hi ? `1px solid ${s.accent}45` : med ? `1px solid ${s.accent}20` : "1px solid rgba(255,255,255,0.07)",
                     boxShadow: hi ? `0 4px 14px ${s.accent}20` : "none",
+                    gridColumn: i === 6 ? "1 / -1" : undefined,
                     display:"flex",flexDirection:"column",alignItems:"center",gap:4,textAlign:"center",
                   }}
                 >
@@ -269,7 +277,7 @@ export default function ResultClient() {
                     fontSize:8,fontWeight:700,letterSpacing:".07em",textTransform:"uppercase",
                     color: hi?s.accent:med?s.accent+"99":"rgba(255,255,255,0.22)",
                   }}>
-                    {hi?"Noted":med?"Mild":"Clear"}
+                    {s.tag === "Age" ? s.ans : hi ? "Noted" : med ? "Mild" : "Clear"}
                   </div>
                 </motion.div>
               );

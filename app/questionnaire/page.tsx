@@ -78,12 +78,23 @@ const questions: Question[] = [
     accent: "#F9A8D4", accentDeep: "#9D174D",
     meshA: "#F9A8D430", meshB: "#9D174D1a",
   },
+  {
+    id: 6, emoji: "🎂", tag: "Age Group",
+    question: "What is your age?",
+    options: ["Under 18", "18-24", "25-30", "31-35", "Above 35"],
+    accent: "#FBBF24", accentDeep: "#B45309",
+    meshA: "#FBBF2430", meshB: "#B453091a",
+  },
 ];
 
 /* ══════════════════════════════════════
    RESULTS PAGE
 ══════════════════════════════════════ */
 function ResultsPage({ answers, onRestart }: ResultsPageProps) {
+  const ageScore = ["18-24", "25-30", "31-35"].includes(answers[6])
+    ? 1
+    : answers[6] ? 0.5 : 0;
+
   const riskScore = [
     answers[0] === "Yes" ? 2 : 0,
     answers[1] === "Frequently" ? 2 : answers[1] === "Sometimes" ? 1 : 0,
@@ -91,9 +102,10 @@ function ResultsPage({ answers, onRestart }: ResultsPageProps) {
     answers[3] === "Yes" ? 2 : 0,
     answers[4] === "Yes" ? 1 : 0,
     answers[5] === "Frequently" ? 2 : answers[5] === "Sometimes" ? 1 : 0,
+    ageScore,
   ].reduce((a, b) => a + b, 0);
 
-  const maxScore = 11;
+  const maxScore = 12;
   const pct = Math.round((riskScore / maxScore) * 100);
 
   const level =
@@ -110,6 +122,7 @@ function ResultsPage({ answers, onRestart }: ResultsPageProps) {
     { label: "Excess Hair", active: answers[3] === "Yes", emoji: "🌿" },
     { label: "Fatigue", active: answers[4] === "Yes", emoji: "😴" },
     { label: "Mood Swings", active: answers[5] !== "Rarely", emoji: "💫" },
+    { label: answers[6] ? `Age: ${answers[6]}` : "Age", active: ["18-24", "25-30", "31-35"].includes(answers[6]), emoji: "🎂" },
   ];
 
   return (
@@ -210,6 +223,7 @@ function ResultsPage({ answers, onRestart }: ResultsPageProps) {
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: 0.4 + i * 0.07 }}
                   style={{
+                    gridColumn: i === 6 ? "1 / -1" : undefined,
                     display: "flex", alignItems: "center", gap: 7,
                     padding: "9px 11px", borderRadius: 12,
                     background: t.active ? `${level.color}15` : "rgba(255,255,255,0.04)",

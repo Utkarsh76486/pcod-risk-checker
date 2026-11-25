@@ -1,17 +1,28 @@
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
-  const { answers } = await req.json();
   try {
-    const res = await fetch(`${process.env.ML_API_URL}/predict`, {
+    const body = await req.json();
+    const base = process.env.ML_API_URL;
+    if (!base) {
+      return NextResponse.json({ error: "ML_API_URL not set" }, { status: 500 });
+    }
+
+    const res = await fetch(`${base.replace(/\/$/, "")}/predict`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers }),
-      signal: AbortSignal.timeout(25000),
+      body: JSON.stringify({
+        answers: body?.answers ?? [],
+        age: typeof body?.age === "number" ? body.age : null,
+      }),
+      cache: "no-store",
     });
-    if (!res.ok) throw new Error("ml error");
+
+    if (!res.ok) {
+      return NextResponse.json({ error: "ML service error" }, { status: 502 });
+    }
     return NextResponse.json(await res.json());
   } catch {
-    return NextResponse.json({ error: "ml_unavailable" }, { status: 503 });
+    return NextResponse.json({ error: "Prediction failed" }, { status: 500 });
   }
 }

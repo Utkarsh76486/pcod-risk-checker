@@ -10,9 +10,12 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 bundle = joblib.load("model.pkl")
 model, features = bundle["model"], bundle["features"]
 
+DEFAULT_AGE = 31  # dataset ka median, agar age na aaye
+
 
 class Req(BaseModel):
-    answers: list[Optional[str]]   # 6 answers, questionnaire ke order me
+    answers: list[Optional[str]]   # 6-7 answers, questionnaire ke order me
+    age: Optional[float] = None    # number me age (frontend ageMap se)
 
 
 @app.get("/")
@@ -22,15 +25,19 @@ def health():
 
 @app.post("/predict")
 def predict(r: Req):
-    a = (r.answers + [None] * 6)[:6]
-    if all(x is None for x in a):
+    a = (r.answers + [None] * 7)[:7]
+    if all(x is None for x in a[:6]):
         raise HTTPException(400, "no answers")
+
+    age = r.age if r.age is not None else DEFAULT_AGE
+    age = min(max(age, 20), 48)  # training data ki range (20-48)
 
     row = pd.DataFrame([{
         "irregular_periods": int(a[0] == "Yes"),
         "acne":              int(a[1] in ("Sometimes", "Frequently")),
         "weight_gain":       int(a[2] == "Yes"),
         "hair_growth":       int(a[3] == "Yes"),
+        "age":               age,
     }])[features]
 
     prob = float(model.predict_proba(row)[0][1])
